@@ -60,3 +60,6 @@ terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform.lock.hcl
 
+# Local storage (if created by mistake)
+local_storage/
+

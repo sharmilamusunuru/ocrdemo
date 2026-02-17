@@ -242,24 +242,21 @@ Response:
 python create_sample_docs.py
 ```
 
-### Test Locally
-```bash
-# Terminal 1
-cd validation_service && python app.py
-
-# Terminal 2
-cd sap_simulator && python app.py
-
-# Browser
-http://localhost:5000
-```
-
 ### Test on Azure
 1. Deploy with `./deploy.sh`
 2. Access `https://<your-app>.azurewebsites.net`
 3. Upload sample PDF
 4. Enter quantity 1234.56
 5. Verify success
+
+### Test API Directly
+```bash
+# Test validation endpoint on Azure
+curl -X POST https://<validation-service>.azurewebsites.net/api/validate \
+  -H "X-Discharge-Quantity: 1234.56" \
+  -H "Content-Type: application/json" \
+  -d '{"blob_name": "sample_discharge_document.pdf"}'
+```
 
 ## Cost Estimates
 
