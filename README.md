@@ -41,7 +41,30 @@ This solution consists of two main components:
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Local Testing (No Azure Required!)
+
+Test the application locally without any Azure services:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/sharmilamusunuru/ocrdemo.git
+cd ocrdemo
+
+# 2. Run local startup script
+./start_local.sh
+
+# 3. Open browser
+# http://localhost:5000
+```
+
+That's it! The application runs in local mode with:
+- ✅ Local file storage (instead of Azure Blob)
+- ✅ Tesseract OCR (instead of Document Intelligence)
+- ✅ Mock AI responses (instead of real GPT-4)
+
+**See [LOCAL_TESTING.md](LOCAL_TESTING.md) for detailed local development guide.**
+
+### Azure Deployment (Production)
 
 1. **Azure Subscription** with access to:
    - Azure App Service

@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  validation-service:
+    build:
+      context: ./validation_service
+      dockerfile: Dockerfile.local
+    ports:
+      - "5001:5001"
+    environment:
+      - LOCAL_STORAGE_PATH=/app/storage
+      - FLASK_ENV=development
+    volumes:
+      - ./local_storage:/app/storage
+      - ./validation_service:/app
+    networks:
+      - ocr-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  sap-simulator:
+    build:
+      context: ./sap_simulator
+      dockerfile: Dockerfile.local
+    ports:
+      - "5000:5000"
+    environment:
+      - LOCAL_STORAGE_PATH=/app/storage
+      - VALIDATION_SERVICE_URL=http://validation-service:5001
+      - FLASK_ENV=development
+    volumes:
+      - ./local_storage:/app/storage
+      - ./sap_simulator:/app
+    depends_on:
+      - validation-service
+    networks:
+      - ocr-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  ocr-network:
+    driver: bridge
+
+volumes:
+  local_storage:
