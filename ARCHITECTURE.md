@@ -161,7 +161,7 @@ This solution demonstrates a SAP-to-Azure integration pattern for discharge quan
 | `validation_service/` | API | Azure Functions | Validation API |
 | `ai_agent.py` | Business Logic | Part of Functions | AI validation |
 | `terraform/` | Infrastructure | N/A | IaC deployment |
-| `create_sample_docs.py` | Testing | Local | Generate test data |
+| `create_sample_docs.py` | Testing | N/A | Generate test data |
 
 ## Deployment Architecture
 
