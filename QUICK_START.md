@@ -1,5 +1,28 @@
 # Quick Reference Guide
 
+## 🎯 NO AZURE NEEDED FOR TESTING!
+
+**You can test the entire application locally without ANY Azure services!**
+
+```bash
+git clone https://github.com/sharmilamusunuru/ocrdemo.git
+cd ocrdemo
+./start_local.sh
+# Open http://localhost:5000
+```
+
+**What you DON'T need:**
+- ❌ No Azure subscription
+- ❌ No Azure credentials  
+- ❌ No Document Intelligence keys
+- ❌ No OpenAI API keys
+- ❌ No infrastructure deployment
+- ❌ No costs!
+
+**See [NO_AZURE_TESTING.md](NO_AZURE_TESTING.md) for complete details**
+
+---
+
 ## 🚀 Getting Started
 
 ### Option 1: Local Testing (Fastest - No Azure needed!)

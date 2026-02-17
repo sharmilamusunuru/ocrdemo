@@ -41,30 +41,36 @@ This solution consists of two main components:
 
 ## 🚀 Quick Start
 
-### Local Testing (No Azure Required!)
+### ✨ Local Testing - NO AZURE NEEDED!
 
-Test the application locally without any Azure services:
+**Test the complete application on your laptop without any Azure services:**
 
 ```bash
 # 1. Clone repository
 git clone https://github.com/sharmilamusunuru/ocrdemo.git
 cd ocrdemo
 
-# 2. Run local startup script
+# 2. Run local startup script (NO Azure credentials needed!)
 ./start_local.sh
 
 # 3. Open browser
 # http://localhost:5000
+
+# 4. Upload sample PDF and test!
 ```
 
-That's it! The application runs in local mode with:
-- ✅ Local file storage (instead of Azure Blob)
-- ✅ Tesseract OCR (instead of Document Intelligence)
-- ✅ Mock AI responses (instead of real GPT-4)
+**That's it!** No Azure account, no credentials, no deployment, no costs!
 
-**See [LOCAL_TESTING.md](LOCAL_TESTING.md) for detailed local development guide.**
+- ✅ Works completely offline
+- ✅ Uses free Tesseract OCR (instead of Document Intelligence)
+- ✅ Uses mock AI responses (instead of GPT-4)
+- ✅ Perfect for development and testing
 
-### Azure Deployment (Production)
+**📖 See [NO_AZURE_TESTING.md](NO_AZURE_TESTING.md) for complete guide on testing without Azure**
+
+---
+
+### 🌩️ Azure Deployment (When Ready for Production)
 
 1. **Azure Subscription** with access to:
    - Azure App Service
