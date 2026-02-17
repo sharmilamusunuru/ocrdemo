@@ -46,17 +46,18 @@ python-dotenv==1.0.0
 
 ## Security Best Practices
 
-### For Local Development
+### For Azure Development
 
 1. **Environment Variables**
    - Never commit `.env` files with credentials
    - Use `.env.example` as a template
    - Keep sensitive data out of code
+   - Store credentials in Azure Key Vault
 
-2. **Local Testing**
-   - Local mode (`app_local.py`) doesn't require credentials
-   - No external API calls in local mode
-   - Safe for offline development
+2. **Azure Configuration**
+   - Use Azure App Service configuration for environment variables
+   - Never hardcode credentials in code
+   - Use Managed Identity where possible
 
 3. **Dependencies**
    - Regularly update dependencies: `pip install --upgrade -r requirements.txt`

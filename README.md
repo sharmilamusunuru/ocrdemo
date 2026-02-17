@@ -35,48 +35,52 @@ This solution consists of two main components:
 
 ## 📋 Documentation
 
+- **[AZURE_AI_SERVICES.md](AZURE_AI_SERVICES.md)** - **READ THIS FIRST**: Which Azure AI services you need (Document Intelligence vs AI Foundry)
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed architecture, components, and Azure service recommendations
 - **[FLOW_DIAGRAMS.md](FLOW_DIAGRAMS.md)** - System flow diagrams and sequence diagrams
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Step-by-step deployment instructions
 
-## 🚀 Quick Start
+## ☁️ Azure AI Services Required
 
-### ✨ Local Testing - NO AZURE NEEDED!
+This solution uses the following Azure AI services:
 
-**Test the complete application on your laptop without any Azure services:**
+### Required Services:
+1. **Azure AI Document Intelligence** (Form Recognizer)
+   - Purpose: OCR and text extraction from PDF documents
+   - Tier: Free tier available (5,000 pages/month) or S0 for production
+   - **This is the primary AI service for document processing**
 
-```bash
-# 1. Clone repository
-git clone https://github.com/sharmilamusunuru/ocrdemo.git
-cd ocrdemo
+2. **Azure OpenAI Service** (GPT-4)
+   - Purpose: Intelligent validation and reasoning
+   - Model: GPT-4 deployment required
+   - **This provides AI-powered validation logic**
 
-# 2. Run local startup script (NO Azure credentials needed!)
-./start_local.sh
+3. **Azure Blob Storage**
+   - Purpose: Secure document storage
+   - Tier: Standard LRS for demo, GRS for production
 
-# 3. Open browser
-# http://localhost:5000
+4. **Azure App Service** or **Azure Functions**
+   - Purpose: Host SAP Simulator and Validation Service
+   - Tier: B1 for demo, P1V2 for production
 
-# 4. Upload sample PDF and test!
-```
+### Is Azure AI Document Intelligence Enough?
 
-**That's it!** No Azure account, no credentials, no deployment, no costs!
+**Answer: You need BOTH Azure AI Document Intelligence AND Azure OpenAI Service**
 
-- ✅ Works completely offline
-- ✅ Uses free Tesseract OCR (instead of Document Intelligence)
-- ✅ Uses mock AI responses (instead of GPT-4)
-- ✅ Perfect for development and testing
+- **Azure AI Document Intelligence**: Extracts text and structure from PDFs (OCR)
+- **Azure OpenAI (GPT-4)**: Performs intelligent validation and reasoning on the extracted text
 
-**📖 See [NO_AZURE_TESTING.md](NO_AZURE_TESTING.md) for complete guide on testing without Azure**
+**Azure AI Foundry is NOT required** for this solution. The combination of Document Intelligence and Azure OpenAI provides everything needed.
 
----
+## 🚀 Quick Start - Azure Deployment
 
-### 🌩️ Azure Deployment (When Ready for Production)
+### Prerequisites
 
 1. **Azure Subscription** with access to:
    - Azure App Service
    - Azure Functions
    - Azure Blob Storage
-   - Azure Document Intelligence (Form Recognizer)
+   - Azure AI Document Intelligence
    - Azure OpenAI Service
 
 2. **Local Development Tools**:
@@ -84,7 +88,7 @@ cd ocrdemo
    - Azure CLI
    - Terraform (for infrastructure deployment)
 
-### Installation
+### Deployment Steps
 
 1. **Clone the repository**:
 ```bash
@@ -109,55 +113,45 @@ cp .env.example .env
 # (These will be output from Terraform)
 ```
 
-4. **Install Python Dependencies**:
-```bash
-# For SAP Simulator
-cd sap_simulator
-pip install -r requirements.txt
+4. **Deploy Applications**:
 
-# For Validation Service
-cd ../validation_service
-pip install -r requirements.txt
-```
-
-5. **Run Locally** (for testing):
-```bash
-# Terminal 1: Start Validation Service
-cd validation_service
-python app.py  # Runs on port 5001
-
-# Terminal 2: Start SAP Simulator
-cd sap_simulator
-python app.py  # Runs on port 5000
-```
-
-6. **Access the Application**:
-```
-Open browser: http://localhost:5000
-```
-
-## 🌐 Azure Deployment
-
-### Option 1: Automated Deployment Script
+**Option 1: Automated Deployment**
 ```bash
 ./deploy.sh
 ```
 
-### Option 2: Manual Deployment
-
-**Deploy SAP Simulator to App Service**:
+**Option 2: Manual Deployment**
 ```bash
+# Deploy SAP Simulator to App Service
 cd sap_simulator
 az webapp up --name <your-app-name> --runtime "PYTHON:3.11"
-```
 
-**Deploy Validation Service to Azure Functions**:
-```bash
+# Deploy Validation Service to Azure Functions
 cd validation_service
 func azure functionapp publish <your-function-app-name>
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
+5. **Configure Azure OpenAI**:
+```bash
+# Create GPT-4 deployment in Azure OpenAI Studio
+# Or use Azure CLI:
+az cognitiveservices account deployment create \
+  --name <your-openai-resource> \
+  --resource-group <your-rg> \
+  --deployment-name gpt-4 \
+  --model-name gpt-4 \
+  --model-version "0613" \
+  --model-format OpenAI \
+  --sku-capacity 10 \
+  --sku-name "Standard"
+```
+
+6. **Access the Application**:
+```
+Open browser: https://<your-app-name>.azurewebsites.net
+```
 
 ## 📁 Project Structure
 

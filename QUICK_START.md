@@ -1,39 +1,20 @@
-# Quick Reference Guide
+# Quick Start Guide - Azure Deployment
 
-## 🎯 NO AZURE NEEDED FOR TESTING!
+## 🎯 Azure AI Services Required
 
-**You can test the entire application locally without ANY Azure services!**
+This solution requires the following Azure AI services:
 
-```bash
-git clone https://github.com/sharmilamusunuru/ocrdemo.git
-cd ocrdemo
-./start_local.sh
-# Open http://localhost:5000
-```
+### Core Services:
+1. **Azure AI Document Intelligence** - For OCR and document text extraction
+2. **Azure OpenAI Service (GPT-4)** - For intelligent validation and reasoning  
+3. **Azure Blob Storage** - For document storage
+4. **Azure App Service/Functions** - For hosting the applications
 
-**What you DON'T need:**
-- ❌ No Azure subscription
-- ❌ No Azure credentials  
-- ❌ No Document Intelligence keys
-- ❌ No OpenAI API keys
-- ❌ No infrastructure deployment
-- ❌ No costs!
-
-**See [NO_AZURE_TESTING.md](NO_AZURE_TESTING.md) for complete details**
+**Note:** Azure AI Foundry is NOT required. Azure AI Document Intelligence + Azure OpenAI is sufficient.
 
 ---
 
 ## 🚀 Getting Started
-
-### Option 1: Local Testing (Fastest - No Azure needed!)
-```bash
-git clone https://github.com/sharmilamusunuru/ocrdemo.git
-cd ocrdemo
-./start_local.sh
-# Open http://localhost:5000
-```
-
-### Option 2: Azure Deployment (Production-ready)
 ```bash
 git clone https://github.com/sharmilamusunuru/ocrdemo.git
 cd ocrdemo
@@ -45,9 +26,7 @@ cd ocrdemo
 
 | File | Purpose |
 |------|---------|
-| `start_local.sh` | Start app locally (no Azure) |
 | `deploy.sh` | Deploy to Azure |
-| `LOCAL_TESTING.md` | Local development guide |
 | `DEPLOYMENT.md` | Azure deployment guide |
 | `ARCHITECTURE.md` | Architecture and service mapping |
 | `FLOW_DIAGRAMS.md` | System flow diagrams |
@@ -68,17 +47,17 @@ Validation Service (Port 5001)
 
 ## 🔧 Commands
 
-### Local Development
+### Azure Deployment
 ```bash
-# Start both services
-./start_local.sh
+# Deploy infrastructure
+cd terraform
+terraform init
+terraform plan
+terraform apply
 
-# Or manually:
-cd validation_service && python app_local.py &  # Port 5001
-cd sap_simulator && python app_local.py &       # Port 5000
-
-# Using Docker
-docker-compose up
+# Deploy applications
+cd ..
+./deploy.sh
 ```
 
 ### Generate Test Documents
@@ -89,15 +68,15 @@ python create_sample_docs.py
 #          sample_discharge_document_3.pdf (qty: 100.00)
 ```
 
-### Health Checks
+### Health Checks (Azure)
 ```bash
-curl http://localhost:5000/health  # SAP Simulator
-curl http://localhost:5001/health  # Validation Service
+curl https://<your-app-name>.azurewebsites.net/health  # SAP Simulator
+curl https://<validation-service>.azurewebsites.net/health  # Validation Service
 ```
 
-### Test API Directly
+### Test API Directly (Azure)
 ```bash
-curl -X POST http://localhost:5001/api/validate \
+curl -X POST https://<validation-service>.azurewebsites.net/api/validate \
   -H "X-Discharge-Quantity: 1234.56" \
   -H "Content-Type: application/json" \
   -d '{"blob_name": "sample_discharge_document.pdf"}'
@@ -128,33 +107,28 @@ curl -X POST http://localhost:5001/api/validate \
 
 ## 🐛 Troubleshooting
 
-### "Connection refused to localhost:5001"
+### "Azure credentials not configured"
 ```bash
-# Start Validation Service first
-cd validation_service && python app_local.py
+# Verify environment variables are set in Azure App Service
+az webapp config appsettings list \
+  --name <your-app-name> \
+  --resource-group <your-rg>
 ```
 
-### "Tesseract not found"
+### "Document Intelligence endpoint not responding"
 ```bash
-# Linux
-sudo apt-get install tesseract-ocr poppler-utils
-
-# macOS
-brew install tesseract poppler
-
-# Then restart services
+# Verify resource is deployed
+az cognitiveservices account show \
+  --name <doc-intelligence-name> \
+  --resource-group <your-rg>
 ```
 
-### "Module not found"
+### View Azure Logs
 ```bash
-cd sap_simulator && pip install -r requirements.txt
-cd ../validation_service && pip install -r requirements.txt
-```
-
-### View Logs
-```bash
-# Logs appear in the terminal where services are running
-# Watch for errors in console output
+# Stream logs from App Service
+az webapp log tail \
+  --name <your-app-name> \
+  --resource-group <your-rg>
 ```
 
 ## 📊 Directory Structure
@@ -163,49 +137,34 @@ cd ../validation_service && pip install -r requirements.txt
 ocrdemo/
 ├── sap_simulator/          # Frontend web app
 │   ├── app.py             # Azure version
-│   ├── app_local.py       # Local version (no Azure)
 │   └── templates/         # HTML UI
 ├── validation_service/     # Backend API
 │   ├── app.py             # Azure version
-│   ├── app_local.py       # Local version (no Azure)
 │   └── ai_agent.py        # AI validation module
 ├── terraform/              # Infrastructure as Code
 │   ├── main.tf            # Resource definitions
 │   ├── variables.tf       # Configuration
 │   └── outputs.tf         # Deployment outputs
-├── start_local.sh          # Local startup script
 ├── deploy.sh               # Azure deployment script
-├── docker-compose.yml      # Docker setup
 └── *.md                    # Documentation files
 ```
 
 ## 🔄 Workflow
 
-### Development Flow
+### Deployment Flow
 ```
 1. Code changes
-2. Test locally (./start_local.sh)
-3. Verify functionality
-4. Commit and push
-5. Deploy to Azure (./deploy.sh)
-6. Test in cloud
-```
-
-### Local → Azure Migration
-```
-1. Develop locally with app_local.py
-2. Test with local OCR
+2. Commit and push
 3. Deploy infrastructure (terraform apply)
-4. Switch to app.py with Azure services
-5. Test with real Document Intelligence & GPT-4
-6. Compare results
+4. Deploy applications (./deploy.sh)
+5. Test in Azure
+6. Monitor with Application Insights
 ```
 
 ## 📖 Documentation Map
 
 ```
 README.md              → Start here (overview)
-├─ LOCAL_TESTING.md    → Local development guide
 ├─ ARCHITECTURE.md     → Azure services & costs
 ├─ FLOW_DIAGRAMS.md    → How it works (diagrams)
 ├─ DEPLOYMENT.md       → Deploy to Azure
@@ -214,30 +173,30 @@ README.md              → Start here (overview)
 
 ## 🎯 Use Cases
 
-### For Development
-- Use local mode (`app_local.py`)
-- Free, fast iteration
-- No Azure costs
+### For Development & Testing
+- Deploy to Azure for testing with real AI services
+- Use Azure's free tiers where available
+- Test Document Intelligence OCR quality
 
 ### For Demonstration
-- Use local mode for quick demos
-- Or deploy to Azure for full AI features
-- Show SAP integration pattern
+- Deploy to Azure to show full AI features
+- Demonstrate SAP integration pattern
+- Show GPT-4 powered validation
 
 ### For Production
-- Deploy to Azure
+- Deploy to Azure with production SKUs
 - Use real Document Intelligence
 - Enable GPT-4 validation
 - Add monitoring and scaling
 
 ## 💡 Tips
 
-1. **Start Local First** - Always test locally before Azure
+1. **Use Terraform for Infrastructure** - Consistent, repeatable deployments
 2. **Use Sample Docs** - Pre-generated PDFs for quick testing
 3. **Check Health Endpoints** - Verify services are running
-4. **Read the Logs** - Console output shows what's happening
-5. **One Service at a Time** - Start validation service first
-6. **Docker for Clean State** - Use Docker Compose for isolated testing
+4. **Read the Logs** - Azure logs show what's happening
+5. **Enable Application Insights** - Monitor performance and errors
+6. **Use Free Tiers** - Document Intelligence has a free tier for testing
 
 ## 🔗 Links
 
@@ -250,33 +209,29 @@ README.md              → Start here (overview)
 
 ## ❓ Need Help?
 
-1. Check [LOCAL_TESTING.md](LOCAL_TESTING.md) for local issues
-2. Check [DEPLOYMENT.md](DEPLOYMENT.md) for Azure issues
-3. Review [ARCHITECTURE.md](ARCHITECTURE.md) for design questions
-4. See [FLOW_DIAGRAMS.md](FLOW_DIAGRAMS.md) to understand flow
+1. Check [DEPLOYMENT.md](DEPLOYMENT.md) for Azure deployment issues
+2. Review [ARCHITECTURE.md](ARCHITECTURE.md) for design questions
+3. See [FLOW_DIAGRAMS.md](FLOW_DIAGRAMS.md) to understand flow
+4. Check Azure service health: https://status.azure.com/
 
 ## ✅ Quick Checklist
 
 ### Before Starting
+- [ ] Azure subscription ready
 - [ ] Python 3.11+ installed
+- [ ] Azure CLI installed
+- [ ] Terraform installed
 - [ ] Git installed
-- [ ] (Optional) Tesseract for local OCR
-- [ ] (Optional) Docker for containerized testing
 
-### Local Testing
-- [ ] Run `./start_local.sh`
-- [ ] Access http://localhost:5000
+### Azure Deployment
+- [ ] Run `terraform init` and `terraform apply`
+- [ ] Deploy GPT-4 model in Azure OpenAI
+- [ ] Run `./deploy.sh`
+- [ ] Configure environment variables
+- [ ] Access https://<your-app>.azurewebsites.net
 - [ ] Upload sample PDF
 - [ ] Verify validation works
 
-### Azure Deployment
-- [ ] Azure subscription ready
-- [ ] Azure CLI installed
-- [ ] Terraform installed
-- [ ] Run `./deploy.sh`
-- [ ] Configure OpenAI deployment
-- [ ] Test in cloud
-
 ---
 
-**Ready to get started? Run `./start_local.sh` and open http://localhost:5000!**
+**Ready to get started? Follow the deployment steps in [DEPLOYMENT.md](DEPLOYMENT.md)!**
