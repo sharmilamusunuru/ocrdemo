@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discharge Quantity Validation - SAP Demo</title>
+    <title>SAP Simulator - Discharge Quantity Validation</title>
     <style>
         * {
             margin: 0;
@@ -272,8 +272,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔍 Discharge Quantity Validator</h1>
-            <p>SAP Integration Demo - Upload document and validate quantities</p>
+            <h1>🏢 SAP Discharge Quantity Simulator</h1>
+            <p>Simulates SAP uploading documents to Azure Blob and calling Validation API</p>
         </div>
         
         <form id="validationForm">
@@ -296,13 +296,14 @@
             </div>
             
             <button type="submit" class="btn" id="submitBtn">
-                💾 Validate & Save
+                💾 Save (Upload to Blob & Validate)
             </button>
         </form>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Processing document with OCR...</p>
+            <p>Uploading to Azure Blob Storage...</p>
+            <p style="font-size: 12px; color: #666;">Then calling Validation Service API...</p>
         </div>
         
         <div class="result" id="result">
@@ -347,7 +348,7 @@
             formData.append('quantity', document.getElementById('quantity').value);
             
             try {
-                const response = await fetch('/validate', {
+                const response = await fetch('/simulate-sap', {
                     method: 'POST',
                     body: formData
                 });
@@ -356,7 +357,7 @@
                 
                 loading.classList.remove('show');
                 
-                if (data.success) {
+                if (data.success && data.validation_service_response) {
                     displayResult(data);
                 } else {
                     alert('Error: ' + (data.error || 'Unknown error occurred'));
@@ -371,22 +372,35 @@
         });
         
         function displayResult(data) {
+            const validationResult = data.validation_service_response.validation_result;
+            const sapSim = data.sap_simulation;
+            const aiAgent = data.validation_service_response.ai_agent;
+            
             result.classList.add('show');
             
-            if (data.validation_passed) {
+            if (validationResult.passed) {
                 result.classList.add('success');
                 resultIcon.textContent = '✅';
                 resultTitle.textContent = 'Validation Successful!';
                 
                 let details = `
+                    <p><strong>SAP Action:</strong> ${sapSim.action}</p>
+                    <p><strong>Blob Name:</strong> ${sapSim.blob_name}</p>
                     <p><strong>Status:</strong> Quantity match found</p>
-                    <p><strong>Entered Quantity:</strong> ${data.entered_quantity}</p>
-                    <p><strong>Matched Value:</strong> ${data.matched_value}</p>
+                    <p><strong>Entered Quantity:</strong> ${validationResult.entered_quantity}</p>
+                    <p><strong>Matched Value:</strong> ${validationResult.matched_value}</p>
                 `;
                 
-                if (data.extracted_quantities && data.extracted_quantities.length > 0) {
+                if (aiAgent && aiAgent.used) {
+                    details += `
+                        <p><strong>AI Agent Confidence:</strong> ${aiAgent.confidence}%</p>
+                        <p><strong>AI Reasoning:</strong> ${aiAgent.reasoning}</p>
+                    `;
+                }
+                
+                if (validationResult.extracted_quantities && validationResult.extracted_quantities.length > 0) {
                     details += '<div class="extracted-quantities"><p><strong>All Extracted Quantities:</strong></p>';
-                    data.extracted_quantities.forEach(qty => {
+                    validationResult.extracted_quantities.forEach(qty => {
                         details += `<span class="quantity-badge">${qty}</span>`;
                     });
                     details += '</div>';
@@ -399,13 +413,22 @@
                 resultTitle.textContent = 'Validation Failed';
                 
                 let details = `
+                    <p><strong>SAP Action:</strong> ${sapSim.action}</p>
+                    <p><strong>Blob Name:</strong> ${sapSim.blob_name}</p>
                     <p><strong>Status:</strong> No matching quantity found</p>
-                    <p><strong>Entered Quantity:</strong> ${data.entered_quantity}</p>
+                    <p><strong>Entered Quantity:</strong> ${validationResult.entered_quantity}</p>
                 `;
                 
-                if (data.extracted_quantities && data.extracted_quantities.length > 0) {
+                if (aiAgent && aiAgent.used) {
+                    details += `
+                        <p><strong>AI Agent Confidence:</strong> ${aiAgent.confidence}%</p>
+                        <p><strong>AI Reasoning:</strong> ${aiAgent.reasoning}</p>
+                    `;
+                }
+                
+                if (validationResult.extracted_quantities && validationResult.extracted_quantities.length > 0) {
                     details += '<div class="extracted-quantities"><p><strong>Extracted Quantities from Document:</strong></p>';
-                    data.extracted_quantities.forEach(qty => {
+                    validationResult.extracted_quantities.forEach(qty => {
                         details += `<span class="quantity-badge">${qty}</span>`;
                     });
                     details += '</div>';
