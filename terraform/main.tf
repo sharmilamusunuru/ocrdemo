@@ -77,6 +77,23 @@ resource "azurerm_cognitive_account" "openai" {
   tags                = var.tags
 }
 
+# GPT-4o model deployment inside the OpenAI account
+resource "azurerm_cognitive_deployment" "gpt4o" {
+  name                 = "gpt-4o"
+  cognitive_account_id = azurerm_cognitive_account.openai.id
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-4o"
+    version = "2024-08-06"
+  }
+
+  sku {
+    name     = "Standard"
+    capacity = 10
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Azure Functions – validation API
 # ---------------------------------------------------------------------------
@@ -157,7 +174,7 @@ resource "azurerm_linux_web_app" "sap_simulator" {
     application_stack {
       python_version = "3.11"
     }
-    app_command_line = "gunicorn --bind=0.0.0.0 --timeout 120 app:app"
+    app_command_line = "gunicorn --bind=0.0.0.0 --timeout 300 app:app"
   }
 
   app_settings = {

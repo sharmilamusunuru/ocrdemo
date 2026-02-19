@@ -22,6 +22,7 @@ Response structure (error / mismatch):
 """
 
 import azure.functions as func
+import io
 import json
 import logging
 import os
@@ -86,7 +87,12 @@ def analyze_document(blob_content: bytes) -> tuple[str, object]:
         endpoint=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
         credential=AzureKeyCredential(AZURE_DOCUMENT_INTELLIGENCE_KEY),
     )
-    poller = client.begin_analyze_document("prebuilt-document", blob_content)
+    doc_stream = io.BytesIO(blob_content)
+    poller = client.begin_analyze_document(
+        "prebuilt-document",
+        document=doc_stream,
+        content_type="application/octet-stream",
+    )
     result = poller.result()
     return (result.content or ""), result
 

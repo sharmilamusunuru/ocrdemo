@@ -101,8 +101,20 @@ def call_validation_service(record_id: str, delivery_quantity: float, blob_name:
     }
 
     response = requests.post(url, json=payload, timeout=300)
-    response.raise_for_status()
-    return response.json()
+
+    # Try to read JSON body even on error status codes so we surface
+    # the actual error message from the validation function.
+    try:
+        result = response.json()
+    except ValueError:
+        response.raise_for_status()
+        raise RuntimeError(f"Validation service returned non-JSON (HTTP {response.status_code})")
+
+    if response.status_code >= 500:
+        detail = result.get('remarks') or result.get('error') or str(result)
+        raise RuntimeError(f"Validation service error: {detail}")
+
+    return result
 
 
 # ---------------------------------------------------------------------------
