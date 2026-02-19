@@ -16,7 +16,7 @@ output "storage_connection_string" {
 
 output "blob_container_name" {
   description = "Name of the blob container"
-  value       = azurerm_storage_container.pdf_documents.name
+  value       = azurerm_storage_container.delivery_documents.name
 }
 
 output "document_intelligence_endpoint" {
@@ -41,12 +41,22 @@ output "openai_key" {
   sensitive   = true
 }
 
+output "function_app_url" {
+  description = "URL of the deployed Azure Function App"
+  value       = "https://${azurerm_linux_function_app.validation_func.default_hostname}"
+}
+
+output "function_app_name" {
+  description = "Name of the Function App"
+  value       = azurerm_linux_function_app.validation_func.name
+}
+
 output "web_app_url" {
-  description = "URL of the deployed web application"
-  value       = "https://${azurerm_linux_web_app.web_app.default_hostname}"
+  description = "URL of the deployed SAP Simulator web app"
+  value       = "https://${azurerm_linux_web_app.sap_simulator.default_hostname}"
 }
 
 output "web_app_name" {
-  description = "Name of the web app"
-  value       = azurerm_linux_web_app.web_app.name
+  description = "Name of the SAP Simulator App Service"
+  value       = azurerm_linux_web_app.sap_simulator.name
 }

@@ -6,7 +6,7 @@ This directory contains Infrastructure as Code (IaC) for deploying the OCR Demo 
 
 - **Resource Group**: Container for all resources
 - **Storage Account**: Azure Blob Storage for PDF documents
-- **Blob Container**: `discharge-documents` container
+- **Blob Container**: `delivery-documents` container
 - **Azure Document Intelligence**: OCR and document analysis service
 - **Azure OpenAI**: GPT-4 for AI-powered validation
 - **App Service Plan**: Linux-based hosting plan
