@@ -100,7 +100,7 @@ def call_validation_service(record_id: str, delivery_quantity: float, blob_name:
         'blob_name': blob_name,
     }
 
-    response = requests.post(url, json=payload, timeout=60)
+    response = requests.post(url, json=payload, timeout=300)
     response.raise_for_status()
     return response.json()
 

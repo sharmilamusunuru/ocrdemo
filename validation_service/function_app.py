@@ -33,7 +33,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from ai_agent import get_validation_agent
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 # ---------------------------------------------------------------------------
 # Configuration from App Settings / environment
@@ -59,6 +59,14 @@ def get_blob_url(blob_name: str) -> str:
     return client.url
 
 
+def read_blob_content(blob_name: str) -> bytes:
+    """Download blob content from Azure Storage."""
+    blob_client = _blob_service().get_blob_client(
+        container=AZURE_STORAGE_CONTAINER_NAME, blob=blob_name
+    )
+    return blob_client.download_blob().readall()
+
+
 def extract_quantities_from_text(text: str) -> list[float]:
     """Pull all plausible numeric quantities out of OCR text."""
     pattern = r'\b\d{1,3}(?:[,\s]?\d{3})*(?:\.\d+)?\b'
@@ -72,13 +80,13 @@ def extract_quantities_from_text(text: str) -> list[float]:
     return quantities
 
 
-def analyze_document(blob_url: str) -> tuple[str, object]:
-    """Run Azure Document Intelligence on a blob URL and return (text, result)."""
+def analyze_document(blob_content: bytes) -> tuple[str, object]:
+    """Run Azure Document Intelligence on blob content and return (text, result)."""
     client = DocumentAnalysisClient(
         endpoint=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
         credential=AzureKeyCredential(AZURE_DOCUMENT_INTELLIGENCE_KEY),
     )
-    poller = client.begin_analyze_document_from_url("prebuilt-document", blob_url)
+    poller = client.begin_analyze_document("prebuilt-document", blob_content)
     result = poller.result()
     return (result.content or ""), result
 
@@ -103,7 +111,7 @@ def write_result_to_blob(record_id: str, result_payload: dict) -> str:
 # ---------------------------------------------------------------------------
 # HTTP Trigger: POST /api/validate
 # ---------------------------------------------------------------------------
-@app.route(route="api/validate", methods=["POST"])
+@app.route(route="validate", methods=["POST"])
 def validate(req: func.HttpRequest) -> func.HttpResponse:
     """
     Validate a delivery quantity against the uploaded PDF.
@@ -149,8 +157,8 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("Validating record_id=%s  qty=%s  blob=%s", record_id, delivery_quantity, blob_name)
 
         # ---- read PDF via Document Intelligence ----
-        blob_url = get_blob_url(blob_name)
-        extracted_text, _ = analyze_document(blob_url)
+        blob_content = read_blob_content(blob_name)
+        extracted_text, _ = analyze_document(blob_content)
         extracted_quantities = extract_quantities_from_text(extracted_text)
 
         # ---- match ----
@@ -216,7 +224,7 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
 # ---------------------------------------------------------------------------
 # HTTP Trigger: GET /api/health
 # ---------------------------------------------------------------------------
-@app.route(route="api/health", methods=["GET"])
+@app.route(route="health", methods=["GET"])
 def health_check(req: func.HttpRequest) -> func.HttpResponse:
     return _json_response({
         'status': 'healthy',
