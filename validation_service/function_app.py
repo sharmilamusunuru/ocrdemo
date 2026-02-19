@@ -142,7 +142,7 @@ def analyze_document(blob_content: bytes) -> tuple[str, object]:
     doc_stream = io.BytesIO(blob_content)
     poller = client.begin_analyze_document(
         "prebuilt-document",
-        analyze_request=doc_stream,
+        doc_stream,
     )
     result = poller.result()
     return (result.content or ""), result
