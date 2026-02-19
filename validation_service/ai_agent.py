@@ -101,14 +101,22 @@ class ValidationAgent:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the AI agent."""
-        return """You are an expert AI agent specializing in validating delivery quantities against shipping and cargo discharge documents.
+        return """You are an expert AI agent specializing in validating delivery quantities against shipping, cargo, and discharge documents.
 
 Your primary role:
-- Find the "WEIGHT OF CARGO DISCHARGED" (or similar wording) in the document text
-- Compare that value against the delivery quantity entered in SAP
-- If the values match, the validation is successful
-- If they don't match, the validation fails
-- Provide clear reasoning about where you found the value and why it matches or doesn't
+- Find the discharged cargo weight, quantity, or value in the document text.
+  Common field names include (but are not limited to):
+    • WEIGHT OF CARGO DISCHARGED
+    • CARGO DISCHARGED WEIGHT / QTY / QUANTITY
+    • DISCHARGED WEIGHT / QTY / QUANTITY
+    • QUANTITY DISCHARGED
+    • TOTAL DISCHARGED / NET DISCHARGED
+    • DELIVERED QTY / DELIVERED WEIGHT
+  The exact wording varies across documents.
+- Compare that value against the delivery quantity entered in SAP.
+- If the values match (within rounding tolerance), the validation is successful.
+- If they don't match, the validation fails.
+- Provide clear reasoning about where you found the value and why it matches or not.
 
 Always respond in valid JSON format."""
     
@@ -122,12 +130,12 @@ Always respond in valid JSON format."""
         doc_preview = document_text[:2000] if len(document_text) > 2000 else document_text
 
         cargo_info = (
-            f"REGEX-EXTRACTED 'WEIGHT OF CARGO DISCHARGED': {cargo_discharged_weight}"
+            f"REGEX-EXTRACTED DISCHARGED WEIGHT: {cargo_discharged_weight}"
             if cargo_discharged_weight is not None
-            else "REGEX-EXTRACTED 'WEIGHT OF CARGO DISCHARGED': Not found by regex — please look for it in the text."
+            else "REGEX-EXTRACTED DISCHARGED WEIGHT: Not found by regex — please locate it in the text yourself."
         )
 
-        return f"""Validate a delivery quantity against a cargo discharge document.
+        return f"""Validate a delivery quantity against a cargo/shipping document.
 
 DOCUMENT TEXT:
 {doc_preview}
@@ -141,15 +149,18 @@ DELIVERY QUANTITY ENTERED IN SAP:
 {entered_quantity}
 
 TASK:
-1. Locate the "WEIGHT OF CARGO DISCHARGED" (or equivalent field) in the document.
+1. Locate the discharged cargo weight / quantity / value in the document.
+   Look for fields like: "Weight of Cargo Discharged", "Cargo Discharged Qty",
+   "Discharged Quantity", "Quantity Discharged", "Total Discharged",
+   "Delivered Qty", "Net Discharged", or any equivalent.
 2. Determine whether the SAP delivery quantity ({entered_quantity}) matches that value.
-3. Consider formatting variations (e.g. 1234.56 vs 1,234.56) and unit labels (MT, KG, etc.).
-4. Ignore numbers that are dates, reference IDs, or unrelated fields.
+3. Consider formatting variations (e.g. 1234.56 vs 1,234.56) and unit labels (MT, KG, LT, BBL, etc.).
+4. Ignore numbers that are clearly dates, reference IDs, vessel numbers, or unrelated fields.
 
 RESPOND IN JSON FORMAT:
 {{
-    "is_valid": <boolean — true if SAP quantity matches cargo discharged weight>,
-    "matched_value": <the cargo discharged weight number from the document, or null>,
+    "is_valid": <boolean — true if SAP quantity matches the discharged weight/qty>,
+    "matched_value": <the discharged weight/qty number from the document, or null>,
     "confidence": <0-100>,
     "reasoning": "<brief explanation of where you found the value and why it matches or not>",
     "field_location": "<exact text snippet where the value appears>"

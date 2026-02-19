@@ -69,33 +69,52 @@ def read_blob_content(blob_name: str) -> bytes:
 
 
 def extract_cargo_discharged_weight(text: str) -> float | None:
-    """Extract the WEIGHT OF CARGO DISCHARGED value from the document text.
+    """Extract the discharged cargo weight/quantity/value from document text.
 
-    Looks for variations like:
+    Handles many OCR and layout variations, including:
       - WEIGHT OF CARGO DISCHARGED
-      - WT OF CARGO DISCHARGED
-      - CARGO DISCHARGED WEIGHT
-      - WEIGHTOFCARGO DISCHARGED
-    followed by a numeric value (possibly with commas or decimals).
+      - WT OF CARGO DISCHARGED / WEIGHTOFCARGO DISCHARGED
+      - CARGO DISCHARGED WEIGHT / QTY / QUANTITY / VALUE
+      - DISCHARGED WEIGHT / QTY / QUANTITY
+      - QUANTITY DISCHARGED / QTY DISCHARGED
+      - TOTAL DISCHARGED / NET DISCHARGED
+      - BILL OF LADING QUANTITY (discharged)
+      - DELIVERED QTY / DELIVERED QUANTITY / DELIVERED WEIGHT
+      Numbers may use commas, spaces, or dots as separators.
     """
-    # Normalise whitespace so OCR artefacts don't break matching
-    normalised = re.sub(r'\s+', ' ', text, flags=re.IGNORECASE)
+    # Normalise: collapse whitespace, strip special unicode dashes/colons
+    normalised = re.sub(r'[\u2013\u2014\u2012]', '-', text)        # en/em dash → hyphen
+    normalised = re.sub(r'\s+', ' ', normalised)
+
+    # Numeric capture group: digits with optional commas/spaces and optional decimal
+    NUM = r'([\d][\d,\.\s]*\d|\d+)'
 
     patterns = [
-        # "WEIGHT OF CARGO DISCHARGED" … <number>
-        r'WEIGHT\s*(?:OF)?\s*CARGO\s*DISCHARGED\s*[:\-–]?\s*([\d][\d,\s]*\.?\d*)',
-        # "CARGO DISCHARGED" … "WEIGHT" … <number>
-        r'CARGO\s*DISCHARGED\s*(?:WEIGHT|WT)\s*[:\-–]?\s*([\d][\d,\s]*\.?\d*)',
-        # "DISCHARGED\s*QTY/QUANTITY/WEIGHT" … <number>
-        r'DISCHARGED\s*(?:QTY|QUANTITY|WEIGHT|WT)\s*[:\-–]?\s*([\d][\d,\s]*\.?\d*)',
+        # --- "WEIGHT OF CARGO DISCHARGED" and close variants ---
+        r'W(?:EIGHT|T)\.?\s*(?:OF\s*)?CARGO\s*DISCHARGED\s*[:\-=]?\s*' + NUM,
+        # --- "CARGO DISCHARGED" followed by weight/qty/value word ---
+        r'CARGO\s*DISCHARGED\s*(?:WEIGHT|WT|QTY|QUANTITY|VALUE|VOL(?:UME)?)\.?\s*[:\-=]?\s*' + NUM,
+        # --- "DISCHARGED" preceded or followed by weight/qty qualifier ---
+        r'DISCHARGED\s*(?:WEIGHT|WT|QTY|QUANTITY|VALUE|CARGO)\.?\s*[:\-=]?\s*' + NUM,
+        r'(?:WEIGHT|WT|QTY|QUANTITY|VALUE)\s*(?:OF\s*)?(?:CARGO\s*)?DISCHARGED\s*[:\-=]?\s*' + NUM,
+        # --- "QUANTITY / QTY DISCHARGED" ---
+        r'(?:QUANTITY|QTY)\s*DISCHARGED\s*[:\-=]?\s*' + NUM,
+        # --- "TOTAL DISCHARGED" / "NET DISCHARGED" ---
+        r'(?:TOTAL|NET|GROSS)\s*(?:CARGO\s*)?DISCHARGED\s*[:\-=]?\s*' + NUM,
+        # --- "DISCHARGED" on its own near a number (last resort) ---
+        r'DISCHARGED\s*[:\-=]?\s*' + NUM,
+        # --- "DELIVERED QTY/WEIGHT/QUANTITY" ---
+        r'DELIVERED\s*(?:WEIGHT|WT|QTY|QUANTITY|VALUE)\.?\s*[:\-=]?\s*' + NUM,
     ]
 
     for pat in patterns:
         m = re.search(pat, normalised, re.IGNORECASE)
         if m:
-            cleaned = m.group(1).replace(',', '').replace(' ', '')
+            raw = m.group(1).replace(',', '').replace(' ', '')
+            # Handle ambiguous thousands-dot, e.g. "1.234" when meant as 1234
+            # If the value contains only one dot and exactly 3 digits after it, keep as-is
             try:
-                return float(cleaned)
+                return float(raw)
             except ValueError:
                 continue
     return None
