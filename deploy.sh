@@ -57,7 +57,11 @@ OPENAI_KEY=$(terraform output -raw openai_key)
 WEB_APP_NAME=$(terraform output -raw web_app_name)
 CONTAINER_NAME=$(terraform output -raw blob_container_name)
 
-# Create .env file
+# Get Function App name
+FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
+FUNCTION_APP_URL=$(terraform output -raw function_app_url)
+
+# Create .env file (for local development only)
 echo "📝 Creating .env file..."
 cd ..
 cat > .env << EOF
@@ -68,13 +72,22 @@ AZURE_DOCUMENT_INTELLIGENCE_KEY=$DOC_INTEL_KEY
 AZURE_OPENAI_ENDPOINT=$OPENAI_ENDPOINT
 AZURE_OPENAI_KEY=$OPENAI_KEY
 AZURE_OPENAI_DEPLOYMENT=gpt-4
+VALIDATION_SERVICE_URL=$FUNCTION_APP_URL
 EOF
 
 echo "✅ .env file created successfully!"
 
-# Deploy application to Azure App Service
-echo "🌐 Deploying application to Azure App Service..."
+# Deploy Validation Service to Azure Functions
+echo "⚡ Deploying Validation Service to Azure Functions..."
+cd validation_service
+func azure functionapp publish $FUNCTION_APP_NAME --python
+cd ..
+
+# Deploy SAP Simulator to Azure App Service
+echo "🌐 Deploying SAP Simulator to Azure App Service..."
+cd sap_simulator
 az webapp up --name $WEB_APP_NAME --runtime "PYTHON:3.11" --sku B1
+cd ..
 
 echo "✨ Deployment completed successfully!"
 echo ""
@@ -84,13 +97,13 @@ cd terraform
 terraform output
 
 echo ""
-echo "🌐 Your application is available at:"
-terraform output -raw web_app_url
+echo "🌐 SAP Simulator:       $(terraform output -raw web_app_url)"
+echo "⚡ Validation Function:  $(terraform output -raw function_app_url)"
 
 echo ""
 echo "💡 Next Steps:"
 echo "1. Deploy a GPT-4 model in your Azure OpenAI resource"
 echo "2. Update the AZURE_OPENAI_DEPLOYMENT environment variable with your deployment name"
-echo "3. Visit your application URL to start validating documents"
+echo "3. Visit the SAP Simulator URL to start validating documents"
 
 cd ..
