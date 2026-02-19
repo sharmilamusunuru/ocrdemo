@@ -40,7 +40,7 @@ class ValidationAgent:
             self.client = AzureOpenAI(
                 azure_endpoint=self.endpoint,
                 api_key=self.api_key,
-                api_version="2024-02-15-preview"
+                api_version="2024-10-21"
             )
             self.enabled = True
         else:
@@ -50,7 +50,8 @@ class ValidationAgent:
     def validate(self, 
                  document_text: str,
                  entered_quantity: float,
-                 extracted_quantities: List[float]) -> Optional[Dict]:
+                 extracted_quantities: List[float],
+                 cargo_discharged_weight: float = None) -> Optional[Dict]:
         """
         Use AI to validate the entered quantity against document content.
         
@@ -58,6 +59,7 @@ class ValidationAgent:
             document_text: Full text extracted from the document
             entered_quantity: Quantity entered by the user
             extracted_quantities: All numerical values found in the document
+            cargo_discharged_weight: Value extracted from the 'Weight of Cargo Discharged' field (if found)
         
         Returns:
             Dictionary with validation result or None if agent is disabled
@@ -69,7 +71,8 @@ class ValidationAgent:
             prompt = self._build_validation_prompt(
                 document_text, 
                 entered_quantity, 
-                extracted_quantities
+                extracted_quantities,
+                cargo_discharged_weight
             )
             
             response = self.client.chat.completions.create(
@@ -98,52 +101,58 @@ class ValidationAgent:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the AI agent."""
-        return """You are an expert AI agent specializing in validating delivery quantities from delivery-order documents.
+        return """You are an expert AI agent specializing in validating delivery quantities against shipping and cargo discharge documents.
 
-Your role:
-- Analyze document text to find delivery quantity information
-- Compare the quantity entered in SAP with the value in the document
-- Consider context to distinguish delivery quantities from other numbers (dates, IDs, etc.)
-- Provide accurate validation with confidence scores
-- Explain your reasoning clearly
+Your primary role:
+- Find the "WEIGHT OF CARGO DISCHARGED" (or similar wording) in the document text
+- Compare that value against the delivery quantity entered in SAP
+- If the values match, the validation is successful
+- If they don't match, the validation fails
+- Provide clear reasoning about where you found the value and why it matches or doesn't
 
 Always respond in valid JSON format."""
     
     def _build_validation_prompt(self,
                                   document_text: str,
                                   entered_quantity: float,
-                                  extracted_quantities: List[float]) -> str:
+                                  extracted_quantities: List[float],
+                                  cargo_discharged_weight: float = None) -> str:
         """Build the validation prompt for the AI."""
         # Limit document text to avoid token limits
-        doc_preview = document_text[:1500] if len(document_text) > 1500 else document_text
-        
-        return f"""Validate a delivery quantity from a delivery-order document.
+        doc_preview = document_text[:2000] if len(document_text) > 2000 else document_text
+
+        cargo_info = (
+            f"REGEX-EXTRACTED 'WEIGHT OF CARGO DISCHARGED': {cargo_discharged_weight}"
+            if cargo_discharged_weight is not None
+            else "REGEX-EXTRACTED 'WEIGHT OF CARGO DISCHARGED': Not found by regex — please look for it in the text."
+        )
+
+        return f"""Validate a delivery quantity against a cargo discharge document.
 
 DOCUMENT TEXT:
 {doc_preview}
 
-EXTRACTED NUMERICAL VALUES:
+{cargo_info}
+
+ALL EXTRACTED NUMERICAL VALUES:
 {extracted_quantities}
 
 DELIVERY QUANTITY ENTERED IN SAP:
 {entered_quantity}
 
 TASK:
-Determine if the entered delivery quantity ({entered_quantity}) accurately matches a delivery quantity in the document.
-
-CONSIDERATIONS:
-1. Look for explicit "delivery quantity" or "qty" mentions
-2. Consider formatting variations (1234.56 vs 1,234.56)
-3. Ignore numbers that are clearly dates, IDs, or other non-quantity values
-4. Consider units and context
+1. Locate the "WEIGHT OF CARGO DISCHARGED" (or equivalent field) in the document.
+2. Determine whether the SAP delivery quantity ({entered_quantity}) matches that value.
+3. Consider formatting variations (e.g. 1234.56 vs 1,234.56) and unit labels (MT, KG, etc.).
+4. Ignore numbers that are dates, reference IDs, or unrelated fields.
 
 RESPOND IN JSON FORMAT:
 {{
-    "is_valid": <boolean>,
-    "matched_value": <number or null>,
+    "is_valid": <boolean — true if SAP quantity matches cargo discharged weight>,
+    "matched_value": <the cargo discharged weight number from the document, or null>,
     "confidence": <0-100>,
-    "reasoning": "<brief explanation>",
-    "field_location": "<where in document the value was found>"
+    "reasoning": "<brief explanation of where you found the value and why it matches or not>",
+    "field_location": "<exact text snippet where the value appears>"
 }}
 """
     

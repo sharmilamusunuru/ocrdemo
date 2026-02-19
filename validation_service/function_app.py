@@ -68,6 +68,39 @@ def read_blob_content(blob_name: str) -> bytes:
     return blob_client.download_blob().readall()
 
 
+def extract_cargo_discharged_weight(text: str) -> float | None:
+    """Extract the WEIGHT OF CARGO DISCHARGED value from the document text.
+
+    Looks for variations like:
+      - WEIGHT OF CARGO DISCHARGED
+      - WT OF CARGO DISCHARGED
+      - CARGO DISCHARGED WEIGHT
+      - WEIGHTOFCARGO DISCHARGED
+    followed by a numeric value (possibly with commas or decimals).
+    """
+    # Normalise whitespace so OCR artefacts don't break matching
+    normalised = re.sub(r'\s+', ' ', text, flags=re.IGNORECASE)
+
+    patterns = [
+        # "WEIGHT OF CARGO DISCHARGED" … <number>
+        r'WEIGHT\s*(?:OF)?\s*CARGO\s*DISCHARGED\s*[:\-–]?\s*([\d][\d,\s]*\.?\d*)',
+        # "CARGO DISCHARGED" … "WEIGHT" … <number>
+        r'CARGO\s*DISCHARGED\s*(?:WEIGHT|WT)\s*[:\-–]?\s*([\d][\d,\s]*\.?\d*)',
+        # "DISCHARGED\s*QTY/QUANTITY/WEIGHT" … <number>
+        r'DISCHARGED\s*(?:QTY|QUANTITY|WEIGHT|WT)\s*[:\-–]?\s*([\d][\d,\s]*\.?\d*)',
+    ]
+
+    for pat in patterns:
+        m = re.search(pat, normalised, re.IGNORECASE)
+        if m:
+            cleaned = m.group(1).replace(',', '').replace(' ', '')
+            try:
+                return float(cleaned)
+            except ValueError:
+                continue
+    return None
+
+
 def extract_quantities_from_text(text: str) -> list[float]:
     """Pull all plausible numeric quantities out of OCR text."""
     pattern = r'\b\d{1,3}(?:[,\s]?\d{3})*(?:\.\d+)?\b'
@@ -90,8 +123,7 @@ def analyze_document(blob_content: bytes) -> tuple[str, object]:
     doc_stream = io.BytesIO(blob_content)
     poller = client.begin_analyze_document(
         "prebuilt-document",
-        document=doc_stream,
-        content_type="application/octet-stream",
+        analyze_request=doc_stream,
     )
     result = poller.result()
     return (result.content or ""), result
@@ -167,20 +199,33 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
         extracted_text, _ = analyze_document(blob_content)
         extracted_quantities = extract_quantities_from_text(extracted_text)
 
+        # ---- targeted extraction: WEIGHT OF CARGO DISCHARGED ----
+        cargo_weight = extract_cargo_discharged_weight(extracted_text)
+        logging.info("Cargo discharged weight from document: %s", cargo_weight)
+
         # ---- match ----
         match_found = False
         matched_value = None
-        for qty in extracted_quantities:
-            if abs(qty - delivery_quantity) < 0.01:
-                match_found = True
-                matched_value = qty
-                break
 
-        # ---- optional AI agent ----
+        # Priority 1: match against the specific cargo discharged weight
+        if cargo_weight is not None:
+            if abs(cargo_weight - delivery_quantity) < 0.01:
+                match_found = True
+                matched_value = cargo_weight
+
+        # Priority 2: fallback – scan all extracted numbers
+        if not match_found:
+            for qty in extracted_quantities:
+                if abs(qty - delivery_quantity) < 0.01:
+                    match_found = True
+                    matched_value = qty
+                    break
+
+        # ---- AI agent for additional validation / reasoning ----
         ai_info = None
         agent = get_validation_agent()
         if agent.enabled:
-            ai_info = agent.validate(extracted_text, delivery_quantity, extracted_quantities)
+            ai_info = agent.validate(extracted_text, delivery_quantity, extracted_quantities, cargo_weight)
             if ai_info:
                 match_found = ai_info.get('is_valid', match_found)
                 if ai_info.get('matched_value') is not None:
@@ -193,6 +238,7 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
                 'record_id': record_id,
                 'delivery_quantity': delivery_quantity,
                 'matched_quantity': matched_value,
+                'cargo_discharged_weight': cargo_weight,
                 'remarks': None,
                 'extracted_quantities': extracted_quantities,
                 'extracted_text_preview': extracted_text[:500],
@@ -205,9 +251,14 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
                 'record_id': record_id,
                 'delivery_quantity': delivery_quantity,
                 'matched_quantity': None,
+                'cargo_discharged_weight': cargo_weight,
                 'remarks': (
-                    f"Delivery quantity {delivery_quantity} not found in document. "
-                    f"Extracted values: {extracted_quantities}"
+                    f"Delivery quantity {delivery_quantity} does not match "
+                    f"Weight of Cargo Discharged in document"
+                    f" ({cargo_weight})." if cargo_weight is not None
+                    else f"Delivery quantity {delivery_quantity} not found in document. "
+                         f"Could not locate 'Weight of Cargo Discharged' field. "
+                         f"All extracted values: {extracted_quantities}"
                 ),
                 'extracted_quantities': extracted_quantities,
                 'extracted_text_preview': extracted_text[:500],

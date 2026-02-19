@@ -80,7 +80,7 @@ echo "✅ .env file created successfully!"
 # Deploy Validation Service to Azure Functions
 echo "⚡ Deploying Validation Service to Azure Functions..."
 cd validation_service
-func azure functionapp publish $FUNCTION_APP_NAME --python
+func azure functionapp publish $FUNCTION_APP_NAME --python --build remote
 cd ..
 
 # Deploy SAP Simulator to Azure App Service
