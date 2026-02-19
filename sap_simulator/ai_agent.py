@@ -14,6 +14,7 @@ The agent:
 import os
 import json
 from typing import Dict, List, Optional, Tuple
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
 
@@ -22,24 +23,25 @@ class ValidationAgent:
     
     def __init__(self, 
                  endpoint: str = None,
-                 api_key: str = None,
                  deployment: str = None):
         """
         Initialize the Validation Agent.
         
         Args:
             endpoint: Azure OpenAI endpoint
-            api_key: Azure OpenAI API key
             deployment: Name of the GPT deployment
         """
         self.endpoint = endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
-        self.api_key = api_key or os.getenv('AZURE_OPENAI_KEY')
         self.deployment = deployment or os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')
         
-        if self.endpoint and self.api_key:
+        if self.endpoint:
+            credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(
+                credential, "https://cognitiveservices.azure.com/.default"
+            )
             self.client = AzureOpenAI(
                 azure_endpoint=self.endpoint,
-                api_key=self.api_key,
+                azure_ad_token_provider=token_provider,
                 api_version="2024-02-15-preview"
             )
             self.enabled = True

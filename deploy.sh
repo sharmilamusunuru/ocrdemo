@@ -49,29 +49,25 @@ terraform apply tfplan
 
 # Get outputs
 echo "📤 Retrieving deployment outputs..."
-STORAGE_CONNECTION=$(terraform output -raw storage_connection_string)
-DOC_INTEL_ENDPOINT=$(terraform output -raw document_intelligence_endpoint)
-DOC_INTEL_KEY=$(terraform output -raw document_intelligence_key)
-OPENAI_ENDPOINT=$(terraform output -raw openai_endpoint)
-OPENAI_KEY=$(terraform output -raw openai_key)
 WEB_APP_NAME=$(terraform output -raw web_app_name)
 CONTAINER_NAME=$(terraform output -raw blob_container_name)
+STORAGE_ACCOUNT_URL=$(terraform output -raw storage_account_url)
+DOC_INTEL_ENDPOINT=$(terraform output -raw document_intelligence_endpoint)
+OPENAI_ENDPOINT=$(terraform output -raw openai_endpoint)
 
 # Get Function App name
 FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
 FUNCTION_APP_URL=$(terraform output -raw function_app_url)
 
-# Create .env file (for local development only)
+# Create .env file (for local development only – no secrets, uses Managed Identity)
 echo "📝 Creating .env file..."
 cd ..
 cat > .env << EOF
-AZURE_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION
+AZURE_STORAGE_ACCOUNT_URL=$STORAGE_ACCOUNT_URL
 AZURE_STORAGE_CONTAINER_NAME=$CONTAINER_NAME
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=$DOC_INTEL_ENDPOINT
-AZURE_DOCUMENT_INTELLIGENCE_KEY=$DOC_INTEL_KEY
 AZURE_OPENAI_ENDPOINT=$OPENAI_ENDPOINT
-AZURE_OPENAI_KEY=$OPENAI_KEY
-AZURE_OPENAI_DEPLOYMENT=gpt-4
+AZURE_OPENAI_DEPLOYMENT=gpt-4o
 VALIDATION_SERVICE_URL=$FUNCTION_APP_URL
 EOF
 

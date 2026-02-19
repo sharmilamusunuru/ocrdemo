@@ -29,26 +29,29 @@ import os
 import re
 from datetime import datetime, timezone
 
+from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.ai.formrecognizer import DocumentAnalysisClient
-from azure.core.credentials import AzureKeyCredential
 from ai_agent import get_validation_agent
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # ---------------------------------------------------------------------------
 # Configuration from App Settings / environment
 # ---------------------------------------------------------------------------
+AZURE_STORAGE_ACCOUNT_URL = os.getenv('AZURE_STORAGE_ACCOUNT_URL', '')
 AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING', '')
 AZURE_STORAGE_CONTAINER_NAME = os.getenv('AZURE_STORAGE_CONTAINER_NAME', 'delivery-documents')
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = os.getenv('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT', '')
-AZURE_DOCUMENT_INTELLIGENCE_KEY = os.getenv('AZURE_DOCUMENT_INTELLIGENCE_KEY', '')
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _blob_service():
+    if AZURE_STORAGE_ACCOUNT_URL:
+        credential = DefaultAzureCredential()
+        return BlobServiceClient(account_url=AZURE_STORAGE_ACCOUNT_URL, credential=credential)
     return BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
 
 
@@ -137,7 +140,7 @@ def analyze_document(blob_content: bytes) -> tuple[str, object]:
     """Run Azure Document Intelligence on blob content and return (text, result)."""
     client = DocumentAnalysisClient(
         endpoint=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_DOCUMENT_INTELLIGENCE_KEY),
+        credential=DefaultAzureCredential(),
     )
     doc_stream = io.BytesIO(blob_content)
     poller = client.begin_analyze_document(
@@ -200,6 +203,16 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
             return _json_response({
                 'status': 'error',
                 'remarks': 'Missing required fields: record_id, delivery_quantity, blob_name',
+            }, 400)
+
+        # Validate blob_name to prevent path traversal
+        if ('..' in blob_name
+                or not blob_name.startswith(f"{record_id}/raw/")
+                or not re.match(r'^[\w-]+/raw/[\w\-\.]+$', blob_name)):
+            return _json_response({
+                'status': 'error',
+                'record_id': record_id,
+                'remarks': 'Invalid blob_name format',
             }, 400)
 
         try:
@@ -294,7 +307,7 @@ def validate(req: func.HttpRequest) -> func.HttpResponse:
 
     except Exception as e:
         logging.exception("Validation error")
-        return _json_response({'status': 'error', 'remarks': str(e)}, 500)
+        return _json_response({'status': 'error', 'remarks': 'An internal error occurred. Please try again later.'}, 500)
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +319,7 @@ def health_check(req: func.HttpRequest) -> func.HttpResponse:
         'status': 'healthy',
         'service': 'Delivery Quantity Validation Function',
         'document_intelligence_configured': bool(AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT),
-        'storage_configured': bool(AZURE_STORAGE_CONNECTION_STRING),
+        'storage_configured': bool(AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING),
         'ai_agent_enabled': get_validation_agent().enabled,
     })
 

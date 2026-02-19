@@ -8,10 +8,9 @@ output "storage_account_name" {
   value       = azurerm_storage_account.ocr_storage.name
 }
 
-output "storage_connection_string" {
-  description = "Connection string for storage account"
-  value       = azurerm_storage_account.ocr_storage.primary_connection_string
-  sensitive   = true
+output "storage_account_url" {
+  description = "Blob endpoint URL for the storage account"
+  value       = azurerm_storage_account.ocr_storage.primary_blob_endpoint
 }
 
 output "blob_container_name" {
@@ -24,21 +23,9 @@ output "document_intelligence_endpoint" {
   value       = azurerm_cognitive_account.document_intelligence.endpoint
 }
 
-output "document_intelligence_key" {
-  description = "Primary key for Document Intelligence"
-  value       = azurerm_cognitive_account.document_intelligence.primary_access_key
-  sensitive   = true
-}
-
 output "openai_endpoint" {
   description = "Endpoint for Azure OpenAI"
   value       = azurerm_cognitive_account.openai.endpoint
-}
-
-output "openai_key" {
-  description = "Primary key for Azure OpenAI"
-  value       = azurerm_cognitive_account.openai.primary_access_key
-  sensitive   = true
 }
 
 output "function_app_url" {

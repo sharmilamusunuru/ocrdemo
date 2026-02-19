@@ -17,10 +17,15 @@ Mimics the real SAP workflow:
 
 from flask import Flask, render_template, request, jsonify
 import os
+import time
+import threading
 import requests
+from functools import wraps
+from collections import defaultdict
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
 import uuid
+from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings
 
 app = Flask(__name__)
@@ -29,16 +34,46 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 
 # Azure Configuration
+AZURE_STORAGE_ACCOUNT_URL = os.getenv('AZURE_STORAGE_ACCOUNT_URL', '')
 AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING', '')
 AZURE_STORAGE_CONTAINER_NAME = os.getenv('AZURE_STORAGE_CONTAINER_NAME', 'delivery-documents')
 
 # Validation Service Configuration (Azure Function App URL)
 VALIDATION_SERVICE_URL = os.getenv('VALIDATION_SERVICE_URL', 'http://localhost:7071')
+VALIDATION_SERVICE_KEY = os.getenv('VALIDATION_SERVICE_KEY', '')
 
 # ---------------------------------------------------------------------------
-# In-memory SAP "database"
+# In-memory SAP "database" (with thread lock)
 # ---------------------------------------------------------------------------
 SAP_DB: dict = {}  # record_id -> { record_id, delivery_quantity, blob_name, … }
+_sap_db_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Simple in-memory rate limiter
+# ---------------------------------------------------------------------------
+_rate_limit_store: dict = defaultdict(list)
+_rate_limit_lock = threading.Lock()
+
+
+def rate_limit(max_requests: int = 10, window_seconds: int = 60):
+    """Decorator that rate-limits requests per client IP."""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            client_ip = request.remote_addr or 'unknown'
+            now = time.time()
+            with _rate_limit_lock:
+                _rate_limit_store[client_ip] = [
+                    t for t in _rate_limit_store[client_ip]
+                    if t > now - window_seconds
+                ]
+                if len(_rate_limit_store[client_ip]) >= max_requests:
+                    return jsonify({'success': False, 'error': 'Rate limit exceeded. Please try again later.'}), 429
+                _rate_limit_store[client_ip].append(now)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def _new_record_id() -> str:
@@ -59,8 +94,10 @@ def upload_pdf_to_blob(file_content: bytes, filename: str, record_id: str):
     Upload the raw PDF into delivery-documents/{record_id}/raw/{filename}.
     Returns (blob_url, blob_name).
     """
-    blob_service_client = BlobServiceClient.from_connection_string(
-        AZURE_STORAGE_CONNECTION_STRING
+    blob_service_client = (
+        BlobServiceClient(account_url=AZURE_STORAGE_ACCOUNT_URL, credential=DefaultAzureCredential())
+        if AZURE_STORAGE_ACCOUNT_URL
+        else BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
     )
     container_client = blob_service_client.get_container_client(
         AZURE_STORAGE_CONTAINER_NAME
@@ -100,7 +137,11 @@ def call_validation_service(record_id: str, delivery_quantity: float, blob_name:
         'blob_name': blob_name,
     }
 
-    response = requests.post(url, json=payload, timeout=300)
+    headers = {}
+    if VALIDATION_SERVICE_KEY:
+        headers['x-functions-key'] = VALIDATION_SERVICE_KEY
+
+    response = requests.post(url, json=payload, headers=headers, timeout=300)
 
     # Try to read JSON body even on error status codes so we surface
     # the actual error message from the validation function.
@@ -133,6 +174,7 @@ def index():
 
 
 @app.route('/simulate-sap', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 def simulate_sap():
     """
     Full SAP save flow:
@@ -175,15 +217,16 @@ def simulate_sap():
         print(f"[SAP] Uploaded: {blob_name}")
 
         # Step 3 – persist record in SAP DB
-        SAP_DB[record_id] = {
-            'record_id': record_id,
-            'delivery_quantity': delivery_quantity,
-            'filename': filename,
-            'blob_name': blob_name,
-            'blob_url': blob_url,
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'validation_status': 'pending',
-        }
+        with _sap_db_lock:
+            SAP_DB[record_id] = {
+                'record_id': record_id,
+                'delivery_quantity': delivery_quantity,
+                'filename': filename,
+                'blob_name': blob_name,
+                'blob_url': blob_url,
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'validation_status': 'pending',
+            }
 
         # Step 4 – call Azure Validation Function API
         print(f"[SAP] Calling validation API for record_id={record_id}, qty={delivery_quantity}")
@@ -191,10 +234,11 @@ def simulate_sap():
         print(f"[SAP] Received validation response")
 
         # Step 5 – update SAP DB with result
-        SAP_DB[record_id]['validation_status'] = (
-            'success' if validation_response.get('status') == 'success' else 'error'
-        )
-        SAP_DB[record_id]['validation_response'] = validation_response
+        with _sap_db_lock:
+            SAP_DB[record_id]['validation_status'] = (
+                'success' if validation_response.get('status') == 'success' else 'error'
+            )
+            SAP_DB[record_id]['validation_response'] = validation_response
 
         # Build response for the UI
         result = {
@@ -211,15 +255,17 @@ def simulate_sap():
         return jsonify(result)
 
     except requests.exceptions.RequestException as e:
-        return jsonify({'success': False, 'error': f'Validation service error: {e}'}), 502
+        return jsonify({'success': False, 'error': 'Validation service is temporarily unavailable. Please try again later.'}), 502
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        app.logger.exception("Unexpected error in simulate_sap")
+        return jsonify({'success': False, 'error': 'An internal error occurred. Please try again later.'}), 500
 
 
 @app.route('/records', methods=['GET'])
 def list_records():
     """Return all SAP records (for debugging / demo)."""
-    return jsonify({'records': list(SAP_DB.values())})
+    with _sap_db_lock:
+        return jsonify({'records': list(SAP_DB.values())})
 
 
 @app.route('/health', methods=['GET'])
@@ -235,7 +281,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'SAP Simulator',
-        'storage_configured': bool(AZURE_STORAGE_CONNECTION_STRING),
+        'storage_configured': bool(AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING),
         'validation_service_url': VALIDATION_SERVICE_URL,
         'validation_service_reachable': validation_service_healthy,
         'total_records': len(SAP_DB),
@@ -243,13 +289,13 @@ def health_check():
 
 
 if __name__ == '__main__':
-    if not AZURE_STORAGE_CONNECTION_STRING:
-        print("WARNING: AZURE_STORAGE_CONNECTION_STRING not configured")
+    if not AZURE_STORAGE_ACCOUNT_URL and not AZURE_STORAGE_CONNECTION_STRING:
+        print("WARNING: AZURE_STORAGE_ACCOUNT_URL / AZURE_STORAGE_CONNECTION_STRING not configured")
         print("  The SAP simulator will not be able to upload files to blob storage")
 
     print("SAP Simulator starting...")
-    print(f"  Blob Storage: {'configured' if AZURE_STORAGE_CONNECTION_STRING else 'NOT configured'}")
+    print(f"  Blob Storage: {'configured' if (AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING) else 'NOT configured'}")
     print(f"  Validation Service: {VALIDATION_SERVICE_URL}")
     print(f"  Web UI: http://localhost:5000")
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)
