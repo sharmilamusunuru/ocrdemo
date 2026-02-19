@@ -13,6 +13,8 @@ The agent:
 
 import os
 import json
+import time
+import logging
 from typing import Dict, List, Optional, Tuple
 from openai import AzureOpenAI
 
@@ -74,29 +76,38 @@ class ValidationAgent:
                 extracted_quantities,
                 cargo_discharged_weight
             )
-            
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": self._get_system_prompt()
-                    },
-                    {
-                        "role": "user", 
-                        "content": prompt
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=500,
-                response_format={"type": "json_object"}
-            )
-            
+
+            messages = [
+                {"role": "system", "content": self._get_system_prompt()},
+                {"role": "user", "content": prompt},
+            ]
+
+            # Retry up to 2 times on 429 rate-limit errors
+            max_retries = 2
+            for attempt in range(max_retries + 1):
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self.deployment,
+                        messages=messages,
+                        temperature=0.1,
+                        max_tokens=500,
+                        response_format={"type": "json_object"},
+                    )
+                    break  # success
+                except Exception as api_err:
+                    if '429' in str(api_err) and attempt < max_retries:
+                        wait = 15 * (attempt + 1)
+                        logging.warning("OpenAI 429 rate limit – retrying in %ds (attempt %d/%d)",
+                                        wait, attempt + 1, max_retries)
+                        time.sleep(wait)
+                    else:
+                        raise
+
             result = json.loads(response.choices[0].message.content)
             return self._process_ai_response(result)
             
         except Exception as e:
-            print(f"AI Agent validation error: {str(e)}")
+            logging.warning("AI Agent validation error: %s", e)
             return None
     
     def _get_system_prompt(self) -> str:

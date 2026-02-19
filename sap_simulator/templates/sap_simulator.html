@@ -187,7 +187,7 @@
                 }
             } catch (err) {
                 loading.classList.remove('show');
-                showError('Failed to communicate with server');
+                showError('Request failed — the validation service may be starting up or processing a large document. Please wait a moment and try again.');
                 console.error(err);
             } finally {
                 submitBtn.disabled = false;
