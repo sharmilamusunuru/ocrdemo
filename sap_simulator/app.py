@@ -107,6 +107,12 @@ def call_validation_service(record_id: str, delivery_quantity: float, blob_name:
     try:
         result = response.json()
     except ValueError:
+        if response.status_code == 502:
+            raise RuntimeError(
+                "Validation service returned 502 Bad Gateway. "
+                "The Function App may still be deploying or restarting. "
+                "Please wait 1-2 minutes and try again."
+            )
         response.raise_for_status()
         raise RuntimeError(f"Validation service returned non-JSON (HTTP {response.status_code})")
 
