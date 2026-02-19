@@ -1,0 +1,107 @@
+# ──────────────────────────────────────────────────────────────
+# CI/CD – Deploy SAP Simulator to Azure App Service
+# ──────────────────────────────────────────────────────────────
+# Triggers:
+#   • Push to main that touches sap_simulator/**
+#   • Manual dispatch (workflow_dispatch)
+#
+# Prerequisites (GitHub repo → Settings → Secrets and variables → Actions):
+#   AZURE_CREDENTIALS – Service Principal JSON for `az login`
+#     Create with:
+#       az ad sp create-for-rbac --name "github-deploy-ocrdemo" \
+#         --role contributor \
+#         --scopes /subscriptions/<SUB_ID>/resourceGroups/rg-ocr-demo-bhp \
+#         --sdk-auth
+# ──────────────────────────────────────────────────────────────
+
+name: Deploy SAP Simulator (Azure App Service)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sap_simulator/**"
+      - ".github/workflows/deploy-sap-simulator.yml"
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: "app-ocr-bhp-2026"
+  AZURE_WEBAPP_PACKAGE_PATH: "sap_simulator"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ── 1. Build & Test ─────────────────────────────────────────
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create virtual environment & install dependencies
+        working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        run: |
+          python -m venv antenv
+          source antenv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with flake8 (optional, non-blocking)
+        working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        continue-on-error: true
+        run: |
+          source antenv/bin/activate
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Package for deployment
+        working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        run: |
+          # Zip everything (Azure Oryx build will handle pip install)
+          zip -r ../sap-simulator.zip . -x "antenv/*" "__pycache__/*" "*.pyc"
+
+      - name: Upload artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: sap-simulator
+          path: sap-simulator.zip
+          retention-days: 1
+
+  # ── 2. Deploy to Azure App Service ─────────────────────────
+  deploy:
+    name: Deploy to Azure App Service
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production
+      url: "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sap-simulator
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: sap-simulator.zip
+
+      - name: Set startup command
+        run: |
+          az webapp config set \
+            --resource-group rg-ocr-demo-bhp \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --startup-file "gunicorn --bind=0.0.0.0 --timeout 120 app:app"

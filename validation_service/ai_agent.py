@@ -1,12 +1,12 @@
 """
-AI Agent for Discharge Quantity Validation
+AI Agent for Delivery Quantity Validation
 
 This module implements an AI-powered validation agent that uses Azure OpenAI
-to intelligently validate discharge quantities from documents.
+to intelligently validate delivery quantities from delivery-order documents.
 
 The agent:
-1. Receives document text from Azure Document Intelligence
-2. Receives user-entered quantity from API header
+1. Receives document text extracted by Azure Document Intelligence
+2. Receives the delivery quantity entered in SAP
 3. Uses GPT-4 to understand context and validate quantities
 4. Returns validation result with confidence score and reasoning
 """
@@ -34,7 +34,7 @@ class ValidationAgent:
         """
         self.endpoint = endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
         self.api_key = api_key or os.getenv('AZURE_OPENAI_KEY')
-        self.deployment = deployment or os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
+        self.deployment = deployment or os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')
         
         if self.endpoint and self.api_key:
             self.client = AzureOpenAI(
@@ -98,12 +98,12 @@ class ValidationAgent:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the AI agent."""
-        return """You are an expert AI agent specializing in validating discharge quantities from SAP documents.
+        return """You are an expert AI agent specializing in validating delivery quantities from delivery-order documents.
 
 Your role:
-- Analyze document text to find discharge quantity information
-- Compare user-entered values with document content
-- Consider context to distinguish discharge quantities from other numbers (dates, IDs, etc.)
+- Analyze document text to find delivery quantity information
+- Compare the quantity entered in SAP with the value in the document
+- Consider context to distinguish delivery quantities from other numbers (dates, IDs, etc.)
 - Provide accurate validation with confidence scores
 - Explain your reasoning clearly
 
@@ -117,7 +117,7 @@ Always respond in valid JSON format."""
         # Limit document text to avoid token limits
         doc_preview = document_text[:1500] if len(document_text) > 1500 else document_text
         
-        return f"""Validate a discharge quantity from a document.
+        return f"""Validate a delivery quantity from a delivery-order document.
 
 DOCUMENT TEXT:
 {doc_preview}
@@ -125,14 +125,14 @@ DOCUMENT TEXT:
 EXTRACTED NUMERICAL VALUES:
 {extracted_quantities}
 
-USER ENTERED QUANTITY:
+DELIVERY QUANTITY ENTERED IN SAP:
 {entered_quantity}
 
 TASK:
-Determine if the entered quantity ({entered_quantity}) accurately matches a discharge quantity in the document.
+Determine if the entered delivery quantity ({entered_quantity}) accurately matches a delivery quantity in the document.
 
 CONSIDERATIONS:
-1. Look for explicit "discharge quantity" mentions
+1. Look for explicit "delivery quantity" or "qty" mentions
 2. Consider formatting variations (1234.56 vs 1,234.56)
 3. Ignore numbers that are clearly dates, IDs, or other non-quantity values
 4. Consider units and context
@@ -166,13 +166,13 @@ RESPOND IN JSON FORMAT:
             return {'error': 'AI Agent not enabled'}
         
         try:
-            prompt = f"""Analyze this discharge document and identify key fields:
+            prompt = f"""Analyze this delivery-order document and identify key fields:
 
 {document_text[:1000]}
 
 Identify and extract:
 1. Document type/title
-2. Discharge quantity field and value
+2. Delivery quantity field and value
 3. Date
 4. Any reference numbers
 5. Material/product information

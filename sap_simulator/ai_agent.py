@@ -34,7 +34,7 @@ class ValidationAgent:
         """
         self.endpoint = endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
         self.api_key = api_key or os.getenv('AZURE_OPENAI_KEY')
-        self.deployment = deployment or os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
+        self.deployment = deployment or os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')
         
         if self.endpoint and self.api_key:
             self.client = AzureOpenAI(

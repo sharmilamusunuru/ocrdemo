@@ -440,7 +440,7 @@ Before going to production:
 - [ ] Implement API authentication (OAuth 2.0/API keys)
 - [ ] Add API Management
 - [ ] Configure network security (VNet integration)
-- [ ] Set up CI/CD pipelines
+- [x] Set up CI/CD pipelines *(see [CI/CD with GitHub Actions](#cicd-with-github-actions) below)*
 - [ ] Enable Azure Key Vault for secrets
 - [ ] Configure monitoring and alerts
 - [ ] Set up log retention policies
@@ -455,3 +455,69 @@ For issues or questions:
 - Review [FLOW_DIAGRAMS.md](FLOW_DIAGRAMS.md) for process flows
 - Check Azure service health: https://status.azure.com/
 - Azure support: https://azure.microsoft.com/support/
+
+---
+
+## CI/CD with GitHub Actions
+
+Three GitHub Actions workflows are provided in `.github/workflows/`:
+
+| Workflow | File | Trigger | Deploys To |
+|---|---|---|---|
+| **Validation Service** | `deploy-validation-service.yml` | Push to `main` changing `validation_service/**` | Azure Functions (`func-ocr-bhp-2026`) |
+| **SAP Simulator** | `deploy-sap-simulator.yml` | Push to `main` changing `sap_simulator/**` | App Service (`app-ocr-bhp-2026`) |
+| **Deploy All** | `deploy-all.yml` | Manual (workflow_dispatch) | Both services |
+
+### One-Time Setup
+
+#### 1. Create an Azure Service Principal
+
+```bash
+# Replace <SUB_ID> with your Azure subscription ID
+az ad sp create-for-rbac \
+  --name "github-deploy-ocrdemo" \
+  --role contributor \
+  --scopes /subscriptions/<SUB_ID>/resourceGroups/rg-ocr-demo-bhp \
+  --sdk-auth
+```
+
+This outputs JSON like:
+```json
+{
+  "clientId": "xxxx",
+  "clientSecret": "xxxx",
+  "subscriptionId": "xxxx",
+  "tenantId": "xxxx",
+  ...
+}
+```
+
+#### 2. Add the Secret to GitHub
+
+1. Go to **GitHub repo → Settings → Secrets and variables → Actions**.
+2. Click **New repository secret**.
+3. Name: `AZURE_CREDENTIALS`
+4. Value: Paste the **entire JSON** output from the previous step.
+
+#### 3. (Optional) Create a GitHub Environment
+
+1. Go to **GitHub repo → Settings → Environments**.
+2. Create an environment named `production`.
+3. Optionally add required reviewers for approval before deploy.
+
+### How It Works
+
+**Automatic deployments**: Push code to `main` that changes files in `validation_service/` or `sap_simulator/` and the corresponding workflow runs automatically.
+
+**Manual full deploy**: Go to **Actions → Deploy All Services → Run workflow** to deploy everything at once.
+
+### Customising Resource Names
+
+If your Azure resource names differ from the defaults, update the `env:` block at the top of each workflow file:
+
+```yaml
+env:
+  AZURE_FUNCTIONAPP_NAME: "your-function-app-name"  # deploy-validation-service.yml
+  AZURE_WEBAPP_NAME: "your-app-service-name"         # deploy-sap-simulator.yml
+  RESOURCE_GROUP: "your-resource-group"               # deploy-all.yml
+```
