@@ -1,0 +1,99 @@
+# ──────────────────────────────────────────────────────────────
+# CI/CD – Deploy All Services (Full Stack)
+# ──────────────────────────────────────────────────────────────
+# Manual trigger only – deploys both services in one run.
+# Useful for initial setup or force-deploying everything.
+# ──────────────────────────────────────────────────────────────
+
+name: Deploy All Services
+
+on:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  AZURE_FUNCTIONAPP_NAME: "func-ocr-bhp-2026"
+  AZURE_WEBAPP_NAME: "app-ocr-bhp-2026"
+  RESOURCE_GROUP: "rg-ocr-demo-bhp"
+
+jobs:
+  # ── 1. Deploy Validation Service (Azure Functions) ──────────
+  deploy-validation-service:
+    name: Deploy Validation Service
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: "https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: validation_service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Package for deployment
+        working-directory: validation_service
+        run: |
+          zip -r ../validation-service.zip . -x "__pycache__/*" "*.pyc" ".python_packages/*"
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: validation-service.zip
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true
+
+  # ── 2. Deploy SAP Simulator (Azure App Service) ────────────
+  deploy-sap-simulator:
+    name: Deploy SAP Simulator
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build package
+        working-directory: sap_simulator
+        run: |
+          zip -r ../sap-simulator.zip . -x "__pycache__/*" "*.pyc"
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: sap-simulator.zip
+
+      - name: Set startup command
+        run: |
+          az webapp config set \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --startup-file "gunicorn --bind=0.0.0.0 --timeout 120 app:app"
